@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "42233964656",
+    "project_id": "syncus-4d97d",
+    "storage_bucket": "syncus-4d97d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:42233964656:android:18e97a97d2e25ad475acb5",
+        "android_client_info": {
+          "package_name": "com.example.syncus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGJTQsOefEO9qHyHxSe_gnY8M2A7_6E7s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
