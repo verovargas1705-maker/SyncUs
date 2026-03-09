@@ -23,6 +23,7 @@ import androidx.navigation.NavController
 import com.example.syncus.ui.navigation.Routes
 import com.example.syncus.ui.viewmodel.AuthViewModel
 
+//Añadida pantalla de registro
 @Composable
 fun RegisterScreen(navController: NavController) {
     val vm = remember { AuthViewModel() }
