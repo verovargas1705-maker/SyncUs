@@ -23,6 +23,9 @@ import com.example.syncus.ui.screens.EditTaskScreen
 
 
 @Composable
+
+//Navegación principal de la aplicación SyncUs
+
 fun AppNavHost() {
     val navController = rememberNavController()
 
