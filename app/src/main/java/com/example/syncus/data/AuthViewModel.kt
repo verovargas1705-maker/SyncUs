@@ -44,12 +44,6 @@ class AuthViewModel : ViewModel() {
         _state.value = _state.value.copy(error = null)
     }
 
-    /**
-     * ✅ Register guardando:
-     * 1) Auth user
-     * 2) displayName en Auth (updateProfile)
-     * 3) /users/{uid} en Firestore
-     */
     fun register(onSuccess: () -> Unit) {
         val name = _state.value.displayName.trim()
         val email = _state.value.email.trim()
@@ -64,7 +58,9 @@ class AuthViewModel : ViewModel() {
             return
         }
         if (pass.length < 6) {
-            _state.value = _state.value.copy(error = "La contraseña debe tener al menos 6 caracteres")
+            _state.value = _state.value.copy(
+                error = "La contraseña debe tener al menos 6 caracteres"
+            )
             return
         }
 
@@ -72,21 +68,17 @@ class AuthViewModel : ViewModel() {
             _state.value = _state.value.copy(loading = true, error = null)
 
             runCatching {
-                // 1) crear usuario en Auth
                 auth.createUserWithEmailAndPassword(email, pass).await()
 
                 val u = auth.currentUser ?: error("No se pudo obtener usuario")
 
-                // 2) guardar displayName en Auth
                 val req = UserProfileChangeRequest.Builder()
                     .setDisplayName(name)
                     .build()
-                u.updateProfile(req).await()
 
-                // (opcional) recargar usuario para que displayName esté actualizado
+                u.updateProfile(req).await()
                 u.reload().await()
 
-                // 3) guardar en Firestore /users/{uid}
                 db.collection("users").document(u.uid)
                     .set(
                         mapOf(

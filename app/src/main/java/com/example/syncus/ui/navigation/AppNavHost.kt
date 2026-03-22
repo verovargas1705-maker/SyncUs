@@ -11,6 +11,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.syncus.ui.screens.AddTaskScreen
 import com.example.syncus.ui.screens.CalendarScreen
+import com.example.syncus.ui.screens.EditTaskScreen
 import com.example.syncus.ui.screens.HomeScreen
 import com.example.syncus.ui.screens.LoginScreen
 import com.example.syncus.ui.screens.ProfileScreen
@@ -18,14 +19,8 @@ import com.example.syncus.ui.screens.RegisterScreen
 import com.example.syncus.ui.screens.SettingsScreen
 import com.example.syncus.ui.screens.SplashScreen
 import com.example.syncus.ui.screens.TasksScreen
-import com.example.syncus.ui.screens.EditTaskScreen
-
-
 
 @Composable
-
-//Navegación principal de la aplicación SyncUs
-
 fun AppNavHost() {
     val navController = rememberNavController()
 

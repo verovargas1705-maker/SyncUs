@@ -1,37 +1,36 @@
 package com.example.syncus.ui.screens
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.syncus.ui.navigation.FirebasePaths
-import com.example.syncus.ui.navigation.Routes
 import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.util.*
-import com.example.syncus.ui.sameMinute
-
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,93 +38,47 @@ fun EditTaskScreen(
     navController: NavController,
     taskId: String
 ) {
-
-    val context = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
-    val auth = remember { FirebaseAuth.getInstance() }
-    val scope = rememberCoroutineScope()
-
-    val uid = auth.currentUser?.uid
 
     var title by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("Media") }
+    var dueDateText by remember { mutableStateOf("") }
 
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val calendar = remember { Calendar.getInstance() }
+    var expanded by remember { mutableStateOf(false) }
 
-    var dateText by remember { mutableStateOf("") }
-    var timeText by remember { mutableStateOf("") }
+    val priorities = listOf("Alta", "Media", "Baja")
 
-    LaunchedEffect(taskId) {
-
+    suspend fun loadTask() {
         runCatching {
-
             val doc = db.collection(FirebasePaths.TASKS)
                 .document(taskId)
                 .get()
                 .await()
 
-            title = doc.getString("title") ?: ""
+            title = doc.getString("title").orEmpty()
             priority = doc.getString("priority") ?: "Media"
 
             val due = doc.getTimestamp("dueAt")?.toDate()
 
-            if (due != null) {
-                calendar.time = due
+            dueDateText = if (due != null) {
+                SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(due)
+            } else {
+                ""
             }
-
-            dateText = "%02d/%02d/%04d".format(
-                calendar.get(Calendar.DAY_OF_MONTH),
-                calendar.get(Calendar.MONTH) + 1,
-                calendar.get(Calendar.YEAR)
-            )
-
-            timeText = "%02d:%02d".format(
-                calendar.get(Calendar.HOUR_OF_DAY),
-                calendar.get(Calendar.MINUTE)
-            )
-
         }.onFailure {
-
-            error = it.message ?: "Error cargando tarea"
+            error = it.message
         }
 
         loading = false
     }
 
-    val datePicker = DatePickerDialog(
-        context,
-        { _, y, m, d ->
-
-            calendar.set(Calendar.YEAR, y)
-            calendar.set(Calendar.MONTH, m)
-            calendar.set(Calendar.DAY_OF_MONTH, d)
-
-            dateText = "%02d/%02d/%04d".format(d, m + 1, y)
-        },
-        calendar.get(Calendar.YEAR),
-        calendar.get(Calendar.MONTH),
-        calendar.get(Calendar.DAY_OF_MONTH)
-    )
-
-    val timePicker = TimePickerDialog(
-        context,
-        { _, h, m ->
-
-            calendar.set(Calendar.HOUR_OF_DAY, h)
-            calendar.set(Calendar.MINUTE, m)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-
-            timeText = "%02d:%02d".format(h, m)
-        },
-        calendar.get(Calendar.HOUR_OF_DAY),
-        calendar.get(Calendar.MINUTE),
-        true
-    )
+    LaunchedEffect(taskId) {
+        loadTask()
+    }
 
     Scaffold(
         topBar = {
@@ -135,21 +88,23 @@ fun EditTaskScreen(
         }
     ) { padding ->
 
-        if (loading) {
-
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            return@Scaffold
-        }
-
         Column(
             modifier = Modifier
+                .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
+            if (error != null) {
+                Text(
+                    text = error!!,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             OutlinedTextField(
                 value = title,
@@ -158,121 +113,85 @@ fun EditTaskScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Text("Prioridad")
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = priority,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Prioridad") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                    },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-
-                listOf("Alta", "Media", "Baja").forEach {
-
-                    FilterChip(
-                        selected = priority == it,
-                        onClick = { priority = it },
-                        label = { Text(it) }
-                    )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    priorities.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                priority = option
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
 
-            OutlinedButton(
-                onClick = { datePicker.show() },
+            OutlinedTextField(
+                value = dueDateText,
+                onValueChange = { dueDateText = it },
+                label = { Text("Fecha (dd/MM/yyyy HH:mm)") },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Fecha: $dateText")
-            }
-
-            OutlinedButton(
-                onClick = { timePicker.show() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Hora: $timeText")
-            }
-
-            if (error != null) {
-
-                Text(
-                    text = error!!,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
+            )
 
             Button(
-
-                enabled = !saving && title.isNotBlank(),
-
+                enabled = title.isNotBlank() && !saving,
+                modifier = Modifier.fillMaxWidth(),
                 onClick = {
-
                     saving = true
                     error = null
 
-                    scope.launch {
+                    runCatching {
+                        val date = if (dueDateText.isNotBlank()) {
+                            SimpleDateFormat(
+                                "dd/MM/yyyy HH:mm",
+                                Locale.getDefault()
+                            ).parse(dueDateText)
+                        } else null
 
-                        runCatching {
+                        val updates = mutableMapOf<String, Any>(
+                            "title" to title,
+                            "priority" to priority
+                        )
 
-                            val dueAt = Timestamp(calendar.time)
-
-                            val snap = db.collection(FirebasePaths.TASKS)
-                                .whereArrayContains("members", uid ?: "")
-                                .get()
-                                .await()
-
-                            val hasConflict = snap.documents.any { doc ->
-
-                                if (doc.id == taskId) return@any false
-
-                                val other =
-                                    doc.getTimestamp("dueAt")?.toDate()
-                                        ?: return@any false
-
-                                sameMinute(
-                                    other,
-                                    dueAt.toDate()
-                                )
-                            }
-
-                            if (hasConflict) {
-
-                                error =
-                                    "⚠ Ya tienes otra tarea en esa misma fecha y hora"
-
-                                saving = false
-                                return@launch
-                            }
-
-                            db.collection(FirebasePaths.TASKS)
-                                .document(taskId)
-                                .update(
-                                    mapOf(
-                                        "title" to title.trim(),
-                                        "priority" to priority,
-                                        "dueAt" to dueAt
-                                    )
-                                )
-                                .await()
-
-                            navController.navigate(Routes.TASKS) {
-
-                                popUpTo(Routes.TASKS) {
-                                    inclusive = true
-                                }
-
-                                launchSingleTop = true
-                            }
-
-                        }.onFailure {
-
-                            error =
-                                it.message ?: "Error guardando cambios"
+                        if (date != null) {
+                            updates["dueAt"] = Timestamp(date)
                         }
 
-                        saving = false
+                        db.collection(FirebasePaths.TASKS)
+                            .document(taskId)
+                            .update(updates)
+                            .addOnSuccessListener {
+                                navController.popBackStack()
+                            }
+                    }.onFailure {
+                        error = it.message
                     }
-                },
 
-                modifier = Modifier.fillMaxWidth()
+                    saving = false
+                }
             ) {
-
-                Text("Guardar cambios")
+                Text(if (saving) "Guardando..." else "Guardar cambios")
             }
         }
     }
 }
-

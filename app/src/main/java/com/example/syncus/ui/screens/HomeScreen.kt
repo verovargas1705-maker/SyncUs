@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +42,7 @@ import androidx.navigation.NavController
 import com.example.syncus.ui.navigation.FirebasePaths
 import com.example.syncus.ui.navigation.Routes
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -59,6 +62,7 @@ data class HomeTaskUi(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
+
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
@@ -76,7 +80,12 @@ fun HomeScreen(navController: NavController) {
 
     var showHelp by rememberSaveable { mutableStateOf(true) }
 
+    var sharedTasksAlert by remember { mutableStateOf(false) }
+    var sharedTasksCount by remember { mutableStateOf(0) }
+    var sharedByName by remember { mutableStateOf("") }
+
     suspend fun loadHome() {
+
         if (uid == null) {
             loading = false
             error = "No hay usuario autenticado"
@@ -88,23 +97,23 @@ fun HomeScreen(navController: NavController) {
 
         runCatching {
             val u = auth.currentUser
+
             if (u != null) {
-                u.reload().await()
-                val authName = auth.currentUser?.displayName.orEmpty()
+                val authName = u.displayName.orEmpty()
 
-                userName = if (authName.isNotBlank()) {
-                    authName
-                } else {
-                    val doc = db.collection(FirebasePaths.USERS)
-                        .document(u.uid)
-                        .get()
-                        .await()
+                userName =
+                    if (authName.isNotBlank()) {
+                        authName
+                    } else {
+                        val doc = db.collection(FirebasePaths.USERS)
+                            .document(u.uid)
+                            .get()
+                            .await()
 
-                    doc.getString("displayName")
-                        ?.takeIf { it.isNotBlank() }
-                        ?: auth.currentUser?.email?.substringBefore("@")
-                        ?: "Usuario"
-                }
+                        doc.getString("displayName")
+                            ?: auth.currentUser?.email?.substringBefore("@")
+                            ?: "Usuario"
+                    }
             }
         }.onFailure {
             userName = auth.currentUser?.email?.substringBefore("@") ?: "Usuario"
@@ -154,11 +163,48 @@ fun HomeScreen(navController: NavController) {
                 .filter { !it.done && it.dueAt != null }
                 .sortedBy { it.dueAt!!.time }
                 .firstOrNull()
+
+            val sharedTasks = snap.documents.filter { doc ->
+                val owner = doc.getString("ownerId")
+                val seenBy = doc.get("seenBy") as? List<String> ?: emptyList()
+
+                owner != uid && !seenBy.contains(uid)
+            }
+
+            if (sharedTasks.isNotEmpty()) {
+                sharedTasksAlert = true
+                sharedTasksCount = sharedTasks.size
+                sharedByName = sharedTasks.first().getString("sharedByName") ?: "Alguien"
+            }
         }.onFailure {
             error = it.message ?: "Error cargando Home"
         }
 
         loading = false
+    }
+
+    suspend fun markSharedTasksAsSeen() {
+
+        if (uid == null) return
+
+        val snap = db.collection(FirebasePaths.TASKS)
+            .whereArrayContains("members", uid)
+            .get()
+            .await()
+
+        val unseenSharedTasks = snap.documents.filter { doc ->
+            val owner = doc.getString("ownerId")
+            val seenBy = doc.get("seenBy") as? List<String> ?: emptyList()
+
+            owner != uid && !seenBy.contains(uid)
+        }
+
+        unseenSharedTasks.forEach { doc ->
+            db.collection(FirebasePaths.TASKS)
+                .document(doc.id)
+                .update("seenBy", FieldValue.arrayUnion(uid))
+                .await()
+        }
     }
 
     LaunchedEffect(uid) {
@@ -170,8 +216,13 @@ fun HomeScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("Home") },
                 actions = {
-                    IconButton(onClick = { navController.navigate(Routes.SETTINGS) }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                    IconButton(
+                        onClick = { navController.navigate(Routes.SETTINGS) }
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Ajustes"
+                        )
                     }
                 }
             )
@@ -192,6 +243,7 @@ fun HomeScreen(navController: NavController) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+
             Text(
                 text = "Hola, $userName 👋",
                 style = MaterialTheme.typography.titleLarge,
@@ -209,12 +261,16 @@ fun HomeScreen(navController: NavController) {
                 )
             }
 
-            Card(shape = MaterialTheme.shapes.large) {
+            Card {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text("Hoy", fontWeight = FontWeight.SemiBold)
+
+                    Text(
+                        text = "Hoy",
+                        fontWeight = FontWeight.SemiBold
+                    )
 
                     if (todayTasks == 0) {
                         Text("No tienes tareas para hoy 🎉")
@@ -226,7 +282,7 @@ fun HomeScreen(navController: NavController) {
                     Spacer(Modifier.height(6.dp))
 
                     Text(
-                        "Tareas totales: $totalTasks",
+                        text = "Tareas totales: $totalTasks",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
@@ -234,20 +290,25 @@ fun HomeScreen(navController: NavController) {
                         Spacer(Modifier.height(8.dp))
                         HorizontalDivider()
                         Spacer(Modifier.height(8.dp))
+
                         Text(
-                            "Próxima tarea",
+                            text = "Próxima tarea",
                             style = MaterialTheme.typography.labelLarge
                         )
+
                         Text(nextTask!!.title)
+
                         Text(
-                            formatDateTime(nextTask!!.dueAt),
+                            text = formatDateTime(nextTask!!.dueAt),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Button(
                     onClick = { navController.navigate(Routes.TASKS) },
                     modifier = Modifier.weight(1f)
@@ -263,39 +324,91 @@ fun HomeScreen(navController: NavController) {
                 }
             }
 
-            OutlinedButton(
-                onClick = { scope.launch { loadHome() } },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Actualizar")
-            }
-
             if (!loading && totalTasks == 0 && showHelp) {
-                Card(shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.padding(16.dp)) {
+                Card {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
                         Row {
                             Text(
-                                text = "Cómo funciona",
+                                text = "Cómo empezar",
                                 modifier = Modifier.weight(1f),
                                 fontWeight = FontWeight.SemiBold
                             )
-                            IconButton(onClick = { showHelp = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Cerrar")
+
+                            IconButton(
+                                onClick = { showHelp = false }
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Cerrar"
+                                )
                             }
                         }
 
-                        Spacer(Modifier.height(6.dp))
-                        Text("1. Pulsa + para crear una tarea")
-                        Text("2. Elige prioridad, fecha y hora")
-                        Text("3. Más adelante podrás compartirla")
+                        Spacer(Modifier.height(8.dp))
+
+                        Text("1️⃣ Pulsa + para crear una tarea")
+                        Text("2️⃣ Elige prioridad, fecha y hora")
+                        Text("3️⃣ Comparte tareas con otras personas")
+                        Text("4️⃣ Revisa tus tareas en calendario o lista")
                     }
                 }
             }
         }
     }
+
+    if (sharedTasksAlert) {
+        AlertDialog(
+            onDismissRequest = { sharedTasksAlert = false },
+
+            title = {
+                Text("Nueva tarea compartida")
+            },
+
+            text = {
+                if (sharedTasksCount == 1) {
+                    Text("$sharedByName ha compartido una tarea contigo")
+                } else {
+                    Text("$sharedByName ha compartido $sharedTasksCount tareas contigo")
+                }
+            },
+
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        sharedTasksAlert = false
+                        scope.launch {
+                            markSharedTasksAsSeen()
+                            navController.navigate(Routes.TASKS)
+                        }
+                    }
+                ) {
+                    Text("Ver tareas")
+                }
+            },
+
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        sharedTasksAlert = false
+                        scope.launch {
+                            markSharedTasksAsSeen()
+                        }
+                    }
+                ) {
+                    Text("Cerrar")
+                }
+            }
+        )
+    }
 }
 
 private fun formatDateTime(date: Date?): String {
     if (date == null) return "Sin fecha"
-    return SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(date)
+
+    return SimpleDateFormat(
+        "dd/MM/yyyy HH:mm",
+        Locale.getDefault()
+    ).format(date)
 }

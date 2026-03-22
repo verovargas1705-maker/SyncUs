@@ -4,7 +4,6 @@ import java.util.Calendar
 import java.util.Date
 
 fun sameMinute(a: Date, b: Date): Boolean {
-
     val ca = Calendar.getInstance().apply { time = a }
     val cb = Calendar.getInstance().apply { time = b }
 
